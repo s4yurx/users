@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Soft back glowing heart -->
+    <path
+        android:fillColor="#FFD4DE"
+        android:fillAlpha="0.55"
+        android:pathData="M62,74 C62,74 44,62.5 44,50.5 C44,44.5 48.8,40 54.4,40 C57.8,40 60.7,41.8 62,44.4 C63.3,41.8 66.2,40 69.6,40 C75.2,40 80,44.5 80,50.5 C80,62.5 62,74 62,74 Z" />
+    <!-- Primary luminous heart -->
+    <path
+        android:fillColor="#FFF8FA"
+        android:pathData="M48,76 C48,76 28,63.2 28,49.8 C28,43.1 33.4,38 39.6,38 C43.4,38 46.6,40.0 48,42.9 C49.4,40.0 52.6,38 56.4,38 C62.6,38 68,43.1 68,49.8 C68,63.2 48,76 48,76 Z" />
+    <!-- Tiny specular gloss sparkle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,44.5 A4.5,2.5 335 1,1 43,42.5 A4.5,2.5 335 1,1 36,44.5 Z" />
+</vector>

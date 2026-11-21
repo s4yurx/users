@@ -1,0 +1,6 @@
+{
+  "name": "Duet",
+  "description": "An intimate space for couples with end-to-end encrypted messaging, shared moods, partner device status, anniversary and birthday countdowns, shared moments, and a home screen widget.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

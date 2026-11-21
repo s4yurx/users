@@ -1,0 +1,265 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- Play-policy compliant app label & companion resolution for UsageStats and Bondly Admin -->
+    <queries>
+        <package android:name="com.aistudio.bondlyadmin.vzrqnp" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MyApplication">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.MyApplication"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- 6 Switchable Android Launcher Icons (Users pick in Logo & Icon Studio) -->
+        <activity-alias
+            android:name="com.example.LauncherClassic"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_round"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name="com.example.LauncherRose"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_rose"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_rose"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name="com.example.LauncherMidnight"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_midnight"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_midnight"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name="com.example.LauncherVelvet"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_velvet"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_velvet"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name="com.example.LauncherSunset"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_sunset"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_sunset"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <activity-alias
+            android:name="com.example.LauncherMinimal"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_minimal"
+            android:label="@string/app_name"
+            android:roundIcon="@mipmap/ic_launcher_minimal"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+
+        <!-- Translucent Quick-Chat Popup Overlay launched directly from Home Screen Chat Widget -->
+        <activity
+            android:name=".widget.WidgetQuickChatActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/Theme.DuetQuickChatOverlay"
+            android:windowSoftInputMode="adjustResize|stateVisible" />
+
+        <service
+            android:name=".service.DuetSyncService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name=".notifications.DuetNotificationActionReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".widget.DuetWidgetActionReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".service.DuetBootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Widget 1: Cute Love Status & Countdown Widget -->
+        <receiver
+            android:name=".widget.DuetLoveWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duet_widget_info" />
+        </receiver>
+
+        <!-- Widget 2: Private Quick-Chat Home Screen Widget -->
+        <receiver
+            android:name=".widget.DuetQuickChatWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_quick_chat_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duet_quick_chat_widget_info" />
+        </receiver>
+
+        <!-- Widget 3: App Theme & Love Pulse Switcher Widget -->
+        <receiver
+            android:name=".widget.DuetThemeWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_theme_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duet_theme_widget_info" />
+        </receiver>
+
+        <!-- Widget 4: Days Together & Countdown Widget -->
+        <receiver
+            android:name=".widget.DuetCountdownWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_countdown_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duet_countdown_widget_info" />
+        </receiver>
+
+        <!-- Widget 5: Quick Mood Check-In Widget -->
+        <receiver
+            android:name=".widget.DuetMoodWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_mood_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duet_mood_widget_info" />
+        </receiver>
+
+        <!-- Widget 6: Today's Couple Question Widget -->
+        <receiver
+            android:name=".widget.DuetQuestionWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_question_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duet_question_widget_info" />
+        </receiver>
+
+        <!-- Widget 7: Partner Battery & Active App Radar Widget -->
+        <receiver
+            android:name=".widget.DuetRadarWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_radar_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duet_radar_widget_info" />
+        </receiver>
+
+        <!-- Widget 8: Couple Care, Love Jar & Song Vibe Hub Widget -->
+        <receiver
+            android:name=".widget.DuetCoupleHubWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_hub_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/duet_hub_widget_info" />
+        </receiver>
+    </application>
+
+</manifest>

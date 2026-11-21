@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Glowing sun halo -->
+    <path
+        android:fillColor="#FFE5B8"
+        android:fillAlpha="0.45"
+        android:pathData="M54,30 A24,24 0 1,0 54,78 A24,24 0 1,0 54,30 Z" />
+    <!-- Bold ivory heart -->
+    <path
+        android:fillColor="#FFFDF9"
+        android:pathData="M54,74 C54,74 32,60.2 32,46.4 C32,39.5 37.6,34 44.3,34 C48.4,34 52.0,36.1 54,39.4 C56.0,36.1 59.6,34 63.7,34 C70.4,34 76,39.5 76,46.4 C76,60.2 54,74 54,74 Z" />
+    <!-- Inner golden heart gem -->
+    <path
+        android:fillColor="#FFAE5C"
+        android:pathData="M54,62 C54,62 44,55.5 44,49.5 C44,46.5 46.5,44 49.5,44 C51.4,44 53.0,45.0 54,46.4 C55.0,45.0 56.6,44 58.5,44 C61.5,44 64,46.5 64,49.5 C64,55.5 54,62 54,62 Z" />
+</vector>

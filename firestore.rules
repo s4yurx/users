@@ -1,0 +1,1295 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidPairCodeId(code) {
+      return code is string && code.size() == 6 && code.matches('^[0-9]{6}$');
+    }
+
+    function isValidDateKey(dateKey) {
+      return dateKey is string && dateKey.size() == 10 && dateKey.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isValidMemberUids(listVal) {
+      return listVal is list &&
+             listVal.size() >= 1 &&
+             listVal.size() <= 2 &&
+             listVal[0] is string && listVal[0].size() >= 1 && listVal[0].size() <= 128 &&
+             (listVal.size() == 1 || (listVal[1] is string && listVal[1].size() >= 1 && listVal[1].size() <= 128 && listVal[1] != listVal[0]));
+    }
+
+    function couplePath(coupleId) {
+      return /databases/$(database)/documents/couples/$(coupleId);
+    }
+
+    function isCoupleMemberDoc(coupleId) {
+      return exists(couplePath(coupleId)) &&
+             request.auth.uid in get(couplePath(coupleId)).data.memberUids;
+    }
+
+    function isPairedPartnerOfUser(userId, targetData) {
+      return targetData != null &&
+             'coupleId' in targetData &&
+             targetData.coupleId is string &&
+             isValidId(targetData.coupleId) &&
+             isCoupleMemberDoc(targetData.coupleId) &&
+             (
+               get(couplePath(targetData.coupleId)).data.creatorUid == userId ||
+               get(couplePath(targetData.coupleId)).data.get('partnerUid', null) == userId
+             );
+    }
+
+    // --- VALIDATION BLUEPRINTS ---
+
+    function isValidUserProfile(data, userId) {
+      return data.userId == userId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.avatarInitials is string && data.avatarInitials.size() >= 1 && data.avatarInitials.size() <= 4 &&
+             data.publicKey is string && data.publicKey.size() >= 1 && data.publicKey.size() <= 512 &&
+             (!('coupleId' in data) || data.coupleId == null || isValidId(data.coupleId)) &&
+             (!('birthdayMonth' in data) || data.birthdayMonth == null || (data.birthdayMonth is int && data.birthdayMonth >= 1 && data.birthdayMonth <= 12)) &&
+             (!('birthdayDay' in data) || data.birthdayDay == null || (data.birthdayDay is int && data.birthdayDay >= 1 && data.birthdayDay <= 31)) &&
+             (!('birthdayYear' in data) || data.birthdayYear == null || (data.birthdayYear is int && data.birthdayYear >= 1900 && data.birthdayYear <= 2100)) &&
+             (!('shareDeviceStatus' in data) || data.shareDeviceStatus is bool) &&
+             (!('partnerNickname' in data) || data.partnerNickname == null || (data.partnerNickname is string && data.partnerNickname.size() <= 40)) &&
+             (!('status' in data) || data.status in ['active', 'banned', 'suspended']) &&
+             (!('isBanned' in data) || data.isBanned is bool) &&
+             (!('banned' in data) || data.banned is bool) &&
+             (!('banReason' in data) || data.banReason == null || (data.banReason is string && data.banReason.size() <= 500)) &&
+             (!('reason' in data) || data.reason == null || (data.reason is string && data.reason.size() <= 500)) &&
+             (!('bannedAt' in data) || data.bannedAt == null || isValidTimestamp(data.bannedAt)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isAccountNotBanned(data) {
+      return data.get('isBanned', false) != true &&
+             data.get('banned', false) != true &&
+             data.get('status', 'active') != 'banned' &&
+             data.get('status', 'active') != 'suspended';
+    }
+
+    function isAppAdmin() {
+      return isSignedIn() && (
+        request.auth.token.get('admin', false) == true ||
+        (request.auth.token.get('email_verified', false) == true &&
+         request.auth.token.get('email', '').lower() == 'sahiloriginal16@gmail.com') ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidPairCode(data, code) {
+      return data.code == code &&
+             isValidId(data.coupleId) &&
+             data.creatorUid is string && data.creatorUid.size() >= 1 && data.creatorUid.size() <= 128 &&
+             data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 60 &&
+             data.status in ['open', 'claimed'] &&
+             (!('claimedByUid' in data) || data.claimedByUid == null || (data.claimedByUid is string && data.claimedByUid.size() >= 1 && data.claimedByUid.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isOptInt(data, k, lo, hi) {
+      let v = data.get(k, null);
+      return v == null || (v is int && v >= lo && v <= hi);
+    }
+
+    function isOptStr(data, k, minLen, maxLen) {
+      let v = data.get(k, null);
+      return v == null || (v is string && v.size() >= minLen && v.size() <= maxLen);
+    }
+
+    function isOptTs(data, k) {
+      let v = data.get(k, null);
+      return v == null || isValidTimestamp(v);
+    }
+
+    function isValidCoupleDates(d) {
+      return isOptInt(d, 'anniversaryYear', 1900, 2100) &&
+             isOptInt(d, 'anniversaryMonth', 1, 12) &&
+             isOptInt(d, 'anniversaryDay', 1, 31) &&
+             isOptInt(d, 'creatorBirthdayMonth', 1, 12) &&
+             isOptInt(d, 'creatorBirthdayDay', 1, 31) &&
+             isOptInt(d, 'partnerBirthdayMonth', 1, 12) &&
+             isOptInt(d, 'partnerBirthdayDay', 1, 31);
+    }
+
+    function isValidCoupleSpace(d) {
+      return d.creatorUid is string && d.creatorUid.size() >= 1 && d.creatorUid.size() <= 128 &&
+             isValidMemberUids(d.memberUids) &&
+             d.memberUids[0] == d.creatorUid &&
+             isValidPairCodeId(d.inviteCode) &&
+             d.status in ['waiting', 'paired', 'dissolved'] &&
+             d.creatorName is string && d.creatorName.size() >= 1 && d.creatorName.size() <= 60 &&
+             d.creatorPublicKey is string && d.creatorPublicKey.size() >= 1 && d.creatorPublicKey.size() <= 512 &&
+             d.wrappedVaultKey is string && d.wrappedVaultKey.size() >= 1 && d.wrappedVaultKey.size() <= 512 &&
+             d.lovePulseCount is int && d.lovePulseCount >= 0 && d.lovePulseCount <= 10000000 &&
+             isOptStr(d, 'partnerUid', 1, 128) &&
+             isOptStr(d, 'partnerName', 1, 60) &&
+             isOptStr(d, 'partnerPublicKey', 1, 512) &&
+             isOptStr(d, 'lastPulseByUid', 1, 128) &&
+             isOptTs(d, 'lastPulseAt') &&
+             isOptStr(d, 'dissolvedByUid', 1, 128) &&
+             isOptStr(d, 'dissolvedByName', 0, 60) &&
+             isOptTs(d, 'dissolvedAt') &&
+             isValidCoupleDates(d) &&
+             isValidTimestamp(d.createdAt) &&
+             isValidTimestamp(d.updatedAt);
+    }
+
+    function isDissolvedDatesCleared(d) {
+      return d.get('anniversaryYear', null) == null &&
+             d.get('anniversaryMonth', null) == null &&
+             d.get('anniversaryDay', null) == null &&
+             d.get('creatorBirthdayMonth', null) == null &&
+             d.get('creatorBirthdayDay', null) == null &&
+             d.get('partnerBirthdayMonth', null) == null &&
+             d.get('partnerBirthdayDay', null) == null &&
+             d.get('lastPulseByUid', null) == null &&
+             d.get('lastPulseAt', null) == null;
+    }
+
+    function isCoupleUpdateAuthorized(coupleId, inc, ex) {
+      let uid = request.auth.uid;
+      let changed = inc.diff(ex).affectedKeys();
+      return isValidTimestamp(inc.updatedAt) &&
+             inc.creatorUid == ex.creatorUid &&
+             inc.wrappedVaultKey == ex.wrappedVaultKey &&
+             inc.createdAt == ex.createdAt &&
+             (
+               // Action 1: Partner joins via valid 6-digit pair code
+               (
+                 ex.status == 'waiting' &&
+                 inc.status == 'paired' &&
+                 ex.memberUids.size() == 1 &&
+                 uid != ex.creatorUid &&
+                 inc.partnerUid == uid &&
+                 inc.memberUids == [ex.creatorUid, uid] &&
+                 inc.partnerName is string && inc.partnerName.size() >= 1 && inc.partnerName.size() <= 60 &&
+                 inc.partnerPublicKey is string && inc.partnerPublicKey.size() >= 1 && inc.partnerPublicKey.size() <= 512 &&
+                 changed.hasOnly(['partnerUid', 'memberUids', 'status', 'partnerName', 'partnerPublicKey', 'updatedAt']) &&
+                 existsAfter(/databases/$(database)/documents/pair_codes/$(ex.inviteCode)) &&
+                 getAfter(/databases/$(database)/documents/pair_codes/$(ex.inviteCode)).data.claimedByUid == uid &&
+                 getAfter(/databases/$(database)/documents/pair_codes/$(ex.inviteCode)).data.coupleId == coupleId
+               ) ||
+               (
+                 uid in ex.memberUids &&
+                 ex.status in ['waiting', 'paired'] &&
+                 (
+                   // Action 2: Couple member updates dates, names, or rotates own public key
+                   (
+                     inc.status == ex.status &&
+                     inc.lovePulseCount == ex.lovePulseCount &&
+                     inc.creatorName is string && inc.creatorName.size() >= 1 && inc.creatorName.size() <= 60 &&
+                     isOptStr(inc, 'partnerName', 1, 60) &&
+                     inc.creatorPublicKey is string && inc.creatorPublicKey.size() >= 1 && inc.creatorPublicKey.size() <= 512 &&
+                     isOptStr(inc, 'partnerPublicKey', 1, 512) &&
+                     (inc.creatorPublicKey == ex.creatorPublicKey || ex.creatorUid == uid) &&
+                     (inc.get('partnerPublicKey', null) == ex.get('partnerPublicKey', null) || ex.get('partnerUid', null) == uid) &&
+                     isValidCoupleDates(inc) &&
+                     changed.hasOnly([
+                       'creatorName', 'partnerName', 'creatorPublicKey', 'partnerPublicKey',
+                       'anniversaryYear', 'anniversaryMonth', 'anniversaryDay',
+                       'creatorBirthdayMonth', 'creatorBirthdayDay',
+                       'partnerBirthdayMonth', 'partnerBirthdayDay', 'updatedAt'
+                     ])
+                   ) ||
+                   // Action 3: Couple member sends a Thinking-of-You Love Pulse
+                   (
+                     inc.status == ex.status &&
+                     inc.lovePulseCount == ex.lovePulseCount + 1 &&
+                     inc.lovePulseCount <= 10000000 &&
+                     inc.lastPulseByUid == uid &&
+                     isOptTs(inc, 'lastPulseAt') &&
+                     changed.hasOnly(['lovePulseCount', 'lastPulseByUid', 'lastPulseAt', 'updatedAt'])
+                   ) ||
+                   // Action 4: Remove as Partner — dissolve space, wipe dates/pulses & rotate 6-digit code
+                   (
+                     inc.status == 'dissolved' &&
+                     isValidPairCodeId(inc.inviteCode) &&
+                     inc.inviteCode != ex.inviteCode &&
+                     inc.lovePulseCount == 0 &&
+                     inc.dissolvedByUid == uid &&
+                     isOptStr(inc, 'dissolvedByName', 0, 60) &&
+                     isOptTs(inc, 'dissolvedAt') &&
+                     isDissolvedDatesCleared(inc) &&
+                     changed.hasOnly([
+                       'status', 'inviteCode', 'lovePulseCount', 'lastPulseByUid', 'lastPulseAt',
+                       'anniversaryYear', 'anniversaryMonth', 'anniversaryDay',
+                       'creatorBirthdayMonth', 'creatorBirthdayDay',
+                       'partnerBirthdayMonth', 'partnerBirthdayDay',
+                       'dissolvedByUid', 'dissolvedByName', 'dissolvedAt', 'updatedAt'
+                     ])
+                   )
+                 )
+               )
+             );
+    }
+
+    function isValidPresence(data, coupleId, memberUid) {
+      return data.userId == memberUid &&
+             data.coupleId == coupleId &&
+             isValidMemberUids(data.memberUids) &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.batteryPercent is int && data.batteryPercent >= -1 && data.batteryPercent <= 100 &&
+             data.charging is bool &&
+             data.networkType in ['WIFI', 'CELLULAR', 'ETHERNET', 'OFFLINE', 'HIDDEN'] &&
+             data.deviceStatus in ['ACTIVE_IN_DUET', 'IN_USE', 'LOCKED', 'HIDDEN'] &&
+             (!('activeAppName' in data) || data.activeAppName == null || (data.activeAppName is string && data.activeAppName.size() <= 60)) &&
+             (!('deviceName' in data) || data.deviceName == null || (data.deviceName is string && data.deviceName.size() <= 100)) &&
+             (!('deviceSpecsJson' in data) || data.deviceSpecsJson == null || (data.deviceSpecsJson is string && data.deviceSpecsJson.size() <= 4096)) &&
+             data.moodKey is string && data.moodKey.size() >= 1 && data.moodKey.size() <= 32 &&
+             data.moodNote is string && data.moodNote.size() <= 140 &&
+             data.statusShared is bool &&
+             (!('typingActive' in data) || data.typingActive is bool) &&
+             (!('typingUpdatedAt' in data) || data.typingUpdatedAt == null || isValidTimestamp(data.typingUpdatedAt)) &&
+             (!('lastSeenAt' in data) || data.lastSeenAt == null || isValidTimestamp(data.lastSeenAt)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function existingReactions(data) {
+      return ('reactions' in data && data.reactions is map) ? data.reactions : {};
+    }
+
+    function isValidEncryptedMessage(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.messageType in ['TEXT', 'IMAGE', 'LOVE_PULSE'] &&
+             data.keyMode in ['ECDH_P256', 'PAIR_VAULT'] &&
+             data.ciphertext is string && data.ciphertext.size() >= 1 && data.ciphertext.size() <= 880000 &&
+             data.iv is string && data.iv.size() >= 1 && data.iv.size() <= 64 &&
+             (!('reaction' in data) || data.reaction == null || (data.reaction is string && data.reaction.size() >= 1 && data.reaction.size() <= 16)) &&
+             (!('reactions' in data) || data.reactions == null || (data.reactions is map && data.reactions.size() <= 2 && data.reactions.keys().hasOnly(data.memberUids))) &&
+             (!('seenByUid' in data) || data.seenByUid == null || (data.seenByUid is string && data.seenByUid.size() >= 1 && data.seenByUid.size() <= 128)) &&
+             (!('seenAt' in data) || data.seenAt == null || isValidTimestamp(data.seenAt)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidMoodEntry(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.moodKey is string && data.moodKey.size() >= 1 && data.moodKey.size() <= 32 &&
+             data.note is string && data.note.size() <= 160 &&
+             data.energyLevel is int && data.energyLevel >= 1 && data.energyLevel <= 5 &&
+             (!('comfortSentByUid' in data) || data.comfortSentByUid == null || (data.comfortSentByUid is string && data.comfortSentByUid.size() >= 1 && data.comfortSentByUid.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidSharedMoment(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.uploaderUid is string && data.uploaderUid.size() >= 1 && data.uploaderUid.size() <= 128 &&
+             data.uploaderName is string && data.uploaderName.size() >= 1 && data.uploaderName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.keyMode in ['ECDH_P256', 'PAIR_VAULT'] &&
+             data.ciphertext is string && data.ciphertext.size() >= 1 && data.ciphertext.size() <= 880000 &&
+             data.iv is string && data.iv.size() >= 1 && data.iv.size() <= 64 &&
+             data.lovedByUids is list && data.lovedByUids.size() <= 2 &&
+             (data.lovedByUids.size() == 0 || (data.lovedByUids[0] is string && data.lovedByUids[0].size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidSpecialDateEvent(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.creatorUid is string && data.creatorUid.size() >= 1 && data.creatorUid.size() <= 128 &&
+             isValidMemberUids(data.memberUids) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 60 &&
+             data.category in ['ANNIVERSARY', 'BIRTHDAY', 'DATE_NIGHT', 'TRIP', 'MILESTONE'] &&
+             data.year is int && data.year >= 1900 && data.year <= 2200 &&
+             data.month is int && data.month >= 1 && data.month <= 12 &&
+             data.day is int && data.day >= 1 && data.day <= 31 &&
+             data.repeatsYearly is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidDailyPrompt(data, coupleId, dateKey) {
+      return data.coupleId == coupleId &&
+             data.dateKey == dateKey &&
+             data.promptIndex is int && data.promptIndex >= 0 && data.promptIndex <= 999 &&
+             isValidMemberUids(data.memberUids) &&
+             (!('creatorAnswer' in data) || data.creatorAnswer == null || (data.creatorAnswer is string && data.creatorAnswer.size() >= 1 && data.creatorAnswer.size() <= 400)) &&
+             (!('partnerAnswer' in data) || data.partnerAnswer == null || (data.partnerAnswer is string && data.partnerAnswer.size() >= 1 && data.partnerAnswer.size() <= 400)) &&
+             (!('creatorAnsweredUid' in data) || data.creatorAnsweredUid == null || (data.creatorAnsweredUid is string && data.creatorAnsweredUid.size() >= 1 && data.creatorAnsweredUid.size() <= 128)) &&
+             (!('partnerAnsweredUid' in data) || data.partnerAnsweredUid == null || (data.partnerAnsweredUid is string && data.partnerAnsweredUid.size() >= 1 && data.partnerAnsweredUid.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBucketListItem(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.creatorUid is string && data.creatorUid.size() >= 1 && data.creatorUid.size() <= 128 &&
+             data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 120 &&
+             data.category in ['DATE_NIGHT', 'TRAVEL', 'COZY', 'ADVENTURE', 'FOODIE', 'MILESTONE'] &&
+             data.completed is bool &&
+             (!('completedByUid' in data) || data.completedByUid == null || (data.completedByUid is string && data.completedByUid.size() >= 1 && data.completedByUid.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidLoveLetter(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+             data.body is string && data.body.size() >= 1 && data.body.size() <= 1500 &&
+             data.sealStyle in ['WAX_ROSE', 'GOLD_ROYAL', 'STARLIGHT', 'VELVET_HEART', 'PAPER_PLANE'] &&
+             data.unlockAtMillis is int && data.unlockAtMillis >= 0 && data.unlockAtMillis <= 4102444800000 &&
+             data.openedByPartner is bool &&
+             (!('openedAt' in data) || data.openedAt == null || isValidTimestamp(data.openedAt)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidLoveJarNote(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+             data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.kind in ['APPRECIATION', 'WISH', 'MEMORY', 'COMPLIMENT'] &&
+             data.text is string && data.text.size() >= 1 && data.text.size() <= 240 &&
+             data.granted is bool &&
+             (!('grantedByUid' in data) || data.grantedByUid == null || (data.grantedByUid is string && data.grantedByUid.size() >= 1 && data.grantedByUid.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidVibeDedication(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.songTitle is string && data.songTitle.size() >= 1 && data.songTitle.size() <= 100 &&
+             data.artistName is string && data.artistName.size() >= 1 && data.artistName.size() <= 80 &&
+             data.vibeEmoji is string && data.vibeEmoji.size() >= 1 && data.vibeEmoji.size() <= 16 &&
+             data.dedicationNote is string && data.dedicationNote.size() <= 220 &&
+             data.lovedByPartner is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCareCheckIn(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 &&
+             data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.careType in ['WATER', 'FOOD', 'MEDS', 'REST', 'SAFE_HOME', 'PERIOD_CARE', 'CUSTOM'] &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 180 &&
+             data.acknowledged is bool &&
+             (!('acknowledgedByUid' in data) || data.acknowledgedByUid == null || (data.acknowledgedByUid is string && data.acknowledgedByUid.size() >= 1 && data.acknowledgedByUid.size() <= 128)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidLoveDoodle(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.artistUid is string && data.artistUid.size() >= 1 && data.artistUid.size() <= 128 &&
+             data.artistName is string && data.artistName.size() >= 1 && data.artistName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.title is string && data.title.size() <= 80 &&
+             data.imageBase64 is string && data.imageBase64.size() >= 1 && data.imageBase64.size() <= 360000 &&
+             data.lovedByPartner is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCouplePromise(data, coupleId) {
+      return data.coupleId == coupleId &&
+             data.creatorUid is string && data.creatorUid.size() >= 1 && data.creatorUid.size() <= 128 &&
+             data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 60 &&
+             isValidMemberUids(data.memberUids) &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+             data.category in ['TRUST', 'ROMANCE', 'QUALITY_TIME', 'GROWTH', 'FUN'] &&
+             data.signedByUids is list && data.signedByUids.size() >= 1 && data.signedByUids.size() <= 2 &&
+             data.signedByUids[0] in data.memberUids &&
+             (data.signedByUids.size() == 1 || (data.signedByUids[1] in data.memberUids && data.signedByUids[1] != data.signedByUids[0])) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    // --- 0A. BONDLY ADMIN OPERATOR REGISTRY (CONSOLE / ADMIN SDK MANAGED ONLY) ---
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && request.auth.uid == adminUid;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // --- 0B. LIVE OVER-THE-AIR APP CONFIGURATION (PUBLIC READ / REALTIME SNAPSHOT, BONDLY ADMIN WRITABLE) ---
+    match /app_config/{configId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /feature_flags/{flagId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /features/{flagId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /banners/{bannerId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /announcements/{announcementId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /promo_banners/{promoId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /promos/{promoId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /version_control/{versionId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /app_versions/{versionId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /dynamic_config/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /key_value_config/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /remote_config/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /kv_config/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /config/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /app_settings/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /settings/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /maintenance/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /maintenance_mode/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /system_config/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /app_status/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /admin_config/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    match /updates/{entryId=**} {
+      allow read: if true;
+      allow create, update, delete: if isAppAdmin();
+    }
+
+    // --- 1. USERS (OWNER-ONLY PII ISOLATED, PAIRED PARTNER BAN VISIBILITY, ADMIN BAN IMMUTABLE BY CLIENT) ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (
+        request.auth.uid == userId ||
+        isPairedPartnerOfUser(userId, resource.data) ||
+        isAppAdmin()
+      );
+      allow list: if isAppAdmin();
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       request.resource.data.keys().hasAll(['userId', 'displayName', 'avatarInitials', 'publicKey', 'createdAt', 'updatedAt']) &&
+                       request.resource.data.keys().hasOnly(['userId', 'displayName', 'avatarInitials', 'publicKey', 'coupleId', 'birthdayMonth', 'birthdayDay', 'birthdayYear', 'shareDeviceStatus', 'partnerNickname', 'createdAt', 'updatedAt']) &&
+                       isValidUserProfile(request.resource.data, userId);
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       (
+                         (
+                           request.auth.uid == userId &&
+                           isAccountNotBanned(resource.data) &&
+                           isValidUserProfile(request.resource.data, userId) &&
+                           (('userId' in resource.data && resource.data.userId is string && resource.data.userId.size() > 0)
+                             ? request.resource.data.userId == resource.data.userId
+                             : request.resource.data.userId == userId) &&
+                           (('createdAt' in resource.data && resource.data.createdAt is timestamp)
+                             ? request.resource.data.createdAt == resource.data.createdAt
+                             : isValidTimestamp(request.resource.data.createdAt)) &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['userId', 'displayName', 'avatarInitials', 'publicKey', 'coupleId', 'birthdayMonth', 'birthdayDay', 'birthdayYear', 'shareDeviceStatus', 'partnerNickname', 'createdAt', 'updatedAt'])
+                         ) ||
+                         (
+                           isAppAdmin() &&
+                           isValidUserProfile(request.resource.data, userId) &&
+                           request.resource.data.userId == resource.data.userId &&
+                           request.resource.data.createdAt == resource.data.createdAt &&
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'isBanned', 'banned', 'banReason', 'reason', 'bannedAt', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if isSignedIn() &&
+                       isValidId(userId) &&
+                       (
+                         (request.auth.uid == userId && isAccountNotBanned(resource.data)) ||
+                         isAppAdmin()
+                       );
+    }
+
+    // --- 2. PAIR CODES (6-DIGIT INVITE LOOKUP, NO LIST) ---
+    match /pair_codes/{code} {
+      allow get: if isSignedIn() && isValidPairCodeId(code);
+      allow list: if false;
+
+      allow create: if isSignedIn() &&
+                       isValidPairCodeId(code) &&
+                       request.resource.data.keys().hasAll(['code', 'coupleId', 'creatorUid', 'creatorName', 'status', 'createdAt', 'updatedAt']) &&
+                       request.resource.data.keys().hasOnly(['code', 'coupleId', 'creatorUid', 'creatorName', 'status', 'createdAt', 'updatedAt']) &&
+                       isValidPairCode(request.resource.data, code) &&
+                       request.resource.data.creatorUid == request.auth.uid &&
+                       request.resource.data.status == 'open' &&
+                       existsAfter(couplePath(request.resource.data.coupleId)) &&
+                       getAfter(couplePath(request.resource.data.coupleId)).data.creatorUid == request.auth.uid;
+
+      allow update: if isSignedIn() &&
+                       isValidPairCodeId(code) &&
+                       isValidPairCode(request.resource.data, code) &&
+                       resource.data.status == 'open' &&
+                       request.resource.data.status == 'claimed' &&
+                       request.resource.data.code == resource.data.code &&
+                       request.resource.data.coupleId == resource.data.coupleId &&
+                       request.resource.data.creatorUid == resource.data.creatorUid &&
+                       request.resource.data.creatorName == resource.data.creatorName &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       'claimedByUid' in request.resource.data &&
+                       request.resource.data.claimedByUid == request.auth.uid &&
+                       request.auth.uid != resource.data.creatorUid &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimedByUid', 'updatedAt']);
+
+      allow delete: if isSignedIn() &&
+                       isValidPairCodeId(code) &&
+                       (
+                         resource.data.creatorUid == request.auth.uid ||
+                         ('claimedByUid' in resource.data && resource.data.claimedByUid == request.auth.uid)
+                       );
+    }
+
+    // --- 3. COUPLES SPACE ---
+    match /couples/{coupleId} {
+      allow get: if isSignedIn() && isValidId(coupleId) && (
+        resource == null ||
+        request.auth.uid in resource.data.memberUids
+      );
+      allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(coupleId) &&
+                       request.resource.data.keys().hasAll(['creatorUid', 'memberUids', 'inviteCode', 'status', 'creatorName', 'creatorPublicKey', 'wrappedVaultKey', 'lovePulseCount', 'createdAt', 'updatedAt']) &&
+                       request.resource.data.keys().hasOnly(['creatorUid', 'memberUids', 'inviteCode', 'status', 'creatorName', 'creatorPublicKey', 'wrappedVaultKey', 'anniversaryYear', 'anniversaryMonth', 'anniversaryDay', 'creatorBirthdayMonth', 'creatorBirthdayDay', 'partnerBirthdayMonth', 'partnerBirthdayDay', 'lovePulseCount', 'createdAt', 'updatedAt']) &&
+                       isValidCoupleSpace(request.resource.data) &&
+                       request.resource.data.creatorUid == request.auth.uid &&
+                       request.resource.data.memberUids.size() == 1 &&
+                       request.resource.data.memberUids[0] == request.auth.uid &&
+                       request.resource.data.status == 'waiting' &&
+                       request.resource.data.lovePulseCount == 0;
+
+      // Unified update rule (each action validates all fields in its mutable allowlist)
+      allow update: if isSignedIn() &&
+                       isValidId(coupleId) &&
+                       isCoupleUpdateAuthorized(coupleId, request.resource.data, resource.data);
+
+      allow delete: if isSignedIn() &&
+                       isValidId(coupleId) &&
+                       (
+                         resource.data.creatorUid == request.auth.uid ||
+                         (resource.data.status == 'dissolved' && request.auth.uid in resource.data.memberUids)
+                       );
+
+      // --- 4. LIVE PARTNER PRESENCE & TELEMETRY ---
+      match /presence/{memberUid} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(memberUid) && (
+          (resource == null && request.auth.uid == memberUid && isCoupleMemberDoc(coupleId)) ||
+          (resource != null && request.auth.uid in resource.data.memberUids)
+        );
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(memberUid) &&
+                         request.auth.uid == memberUid &&
+                         request.resource.data.keys().hasAll(['userId', 'coupleId', 'memberUids', 'displayName', 'batteryPercent', 'charging', 'networkType', 'deviceStatus', 'moodKey', 'moodNote', 'statusShared', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['userId', 'coupleId', 'memberUids', 'displayName', 'batteryPercent', 'charging', 'networkType', 'deviceStatus', 'activeAppName', 'deviceName', 'deviceSpecsJson', 'moodKey', 'moodNote', 'statusShared', 'typingActive', 'typingUpdatedAt', 'lastSeenAt', 'createdAt', 'updatedAt']) &&
+                         isValidPresence(request.resource.data, coupleId, memberUid) &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         get(couplePath(coupleId)).data.status != 'dissolved' &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(memberUid) &&
+                         isValidPresence(request.resource.data, coupleId, memberUid) &&
+                         request.auth.uid == memberUid &&
+                         request.resource.data.userId == resource.data.userId &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         isCoupleMemberDoc(coupleId) &&
+                         get(couplePath(coupleId)).data.status != 'dissolved' &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'batteryPercent', 'charging', 'networkType', 'deviceStatus', 'activeAppName', 'deviceName', 'deviceSpecsJson', 'moodKey', 'moodNote', 'statusShared', 'typingActive', 'typingUpdatedAt', 'lastSeenAt', 'memberUids', 'updatedAt']);
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(memberUid) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 5. END-TO-END ENCRYPTED MESSAGES ---
+      match /messages/{messageId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(messageId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(messageId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'senderUid', 'senderName', 'memberUids', 'messageType', 'keyMode', 'ciphertext', 'iv', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'senderUid', 'senderName', 'memberUids', 'messageType', 'keyMode', 'ciphertext', 'iv', 'reaction', 'reactions', 'seenByUid', 'seenAt', 'createdAt', 'updatedAt']) &&
+                         isValidEncryptedMessage(request.resource.data, coupleId) &&
+                         request.resource.data.senderUid == request.auth.uid &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(messageId) &&
+                         isValidEncryptedMessage(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.senderUid == resource.data.senderUid &&
+                         request.resource.data.senderName == resource.data.senderName &&
+                         request.resource.data.messageType == resource.data.messageType &&
+                         request.resource.data.keyMode == resource.data.keyMode &&
+                         request.resource.data.ciphertext == resource.data.ciphertext &&
+                         request.resource.data.iv == resource.data.iv &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'updatedAt']) &&
+                             'reactions' in request.resource.data &&
+                             request.resource.data.reactions is map &&
+                             request.resource.data.reactions.diff(existingReactions(resource.data)).affectedKeys().hasOnly([request.auth.uid]) &&
+                             (!(request.auth.uid in request.resource.data.reactions) || (request.resource.data.reactions[request.auth.uid] is string && request.resource.data.reactions[request.auth.uid].size() >= 1 && request.resource.data.reactions[request.auth.uid].size() <= 16))
+                           ) ||
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reaction', 'updatedAt'])
+                           ) ||
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.auth.uid != resource.data.senderUid &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             'seenByUid' in request.resource.data &&
+                             request.resource.data.seenByUid == request.auth.uid &&
+                             'seenAt' in request.resource.data &&
+                             isValidTimestamp(request.resource.data.seenAt) &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seenByUid', 'seenAt', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.senderUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(messageId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 6. SHARED MOOD TRACKER HISTORY ---
+      match /moods/{moodId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(moodId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(moodId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'userId', 'authorName', 'memberUids', 'moodKey', 'note', 'energyLevel', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'userId', 'authorName', 'memberUids', 'moodKey', 'note', 'energyLevel', 'comfortSentByUid', 'createdAt', 'updatedAt']) &&
+                         isValidMoodEntry(request.resource.data, coupleId) &&
+                         request.resource.data.userId == request.auth.uid &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(moodId) &&
+                         isValidMoodEntry(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.userId == resource.data.userId &&
+                         request.resource.data.authorName == resource.data.authorName &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             'comfortSentByUid' in request.resource.data &&
+                             request.resource.data.comfortSentByUid == request.auth.uid &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comfortSentByUid', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.userId == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(moodId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 7. SHARED ENCRYPTED PHOTO MOMENTS ---
+      match /moments/{momentId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(momentId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(momentId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'uploaderUid', 'uploaderName', 'memberUids', 'keyMode', 'ciphertext', 'iv', 'lovedByUids', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'uploaderUid', 'uploaderName', 'memberUids', 'keyMode', 'ciphertext', 'iv', 'lovedByUids', 'createdAt', 'updatedAt']) &&
+                         isValidSharedMoment(request.resource.data, coupleId) &&
+                         request.resource.data.uploaderUid == request.auth.uid &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(momentId) &&
+                         isValidSharedMoment(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.uploaderUid == resource.data.uploaderUid &&
+                         request.resource.data.uploaderName == resource.data.uploaderName &&
+                         request.resource.data.keyMode == resource.data.keyMode &&
+                         request.resource.data.ciphertext == resource.data.ciphertext &&
+                         request.resource.data.iv == resource.data.iv &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lovedByUids', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.uploaderUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(momentId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 8. SPECIAL DATES & COUNTDOWNS ---
+      match /events/{eventId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(eventId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(eventId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'creatorUid', 'memberUids', 'title', 'category', 'year', 'month', 'day', 'repeatsYearly', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'creatorUid', 'memberUids', 'title', 'category', 'year', 'month', 'day', 'repeatsYearly', 'createdAt', 'updatedAt']) &&
+                         isValidSpecialDateEvent(request.resource.data, coupleId) &&
+                         request.resource.data.creatorUid == request.auth.uid &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(eventId) &&
+                         isValidSpecialDateEvent(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.creatorUid == resource.data.creatorUid &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'category', 'year', 'month', 'day', 'repeatsYearly', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.creatorUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(eventId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 9. DAILY COUPLE PROMPT ---
+      match /daily_prompts/{dateKey} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidDateKey(dateKey) && (
+          (resource == null && isCoupleMemberDoc(coupleId)) ||
+          (resource != null && request.auth.uid in resource.data.memberUids)
+        );
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidDateKey(dateKey) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'dateKey', 'promptIndex', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'dateKey', 'promptIndex', 'memberUids', 'creatorAnswer', 'partnerAnswer', 'creatorAnsweredUid', 'partnerAnsweredUid', 'createdAt', 'updatedAt']) &&
+                         isValidDailyPrompt(request.resource.data, coupleId, dateKey) &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                         (
+                           (
+                             'creatorAnsweredUid' in request.resource.data &&
+                             request.resource.data.creatorAnsweredUid == request.auth.uid &&
+                             'creatorAnswer' in request.resource.data &&
+                             request.resource.data.creatorAnswer != null &&
+                             !('partnerAnswer' in request.resource.data) &&
+                             !('partnerAnsweredUid' in request.resource.data) &&
+                             get(couplePath(coupleId)).data.creatorUid == request.auth.uid
+                           ) ||
+                           (
+                             'partnerAnsweredUid' in request.resource.data &&
+                             request.resource.data.partnerAnsweredUid == request.auth.uid &&
+                             'partnerAnswer' in request.resource.data &&
+                             request.resource.data.partnerAnswer != null &&
+                             !('creatorAnswer' in request.resource.data) &&
+                             !('creatorAnsweredUid' in request.resource.data) &&
+                             get(couplePath(coupleId)).data.partnerUid == request.auth.uid
+                           )
+                         );
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidDateKey(dateKey) &&
+                         isValidDailyPrompt(request.resource.data, coupleId, dateKey) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.dateKey == resource.data.dateKey &&
+                         request.resource.data.promptIndex == resource.data.promptIndex &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             'creatorAnsweredUid' in request.resource.data &&
+                             request.resource.data.creatorAnsweredUid == request.auth.uid &&
+                             get(couplePath(coupleId)).data.creatorUid == request.auth.uid &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['creatorAnswer', 'creatorAnsweredUid', 'updatedAt'])
+                           ) ||
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             'partnerAnsweredUid' in request.resource.data &&
+                             request.resource.data.partnerAnsweredUid == request.auth.uid &&
+                             get(couplePath(coupleId)).data.partnerUid == request.auth.uid &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['partnerAnswer', 'partnerAnsweredUid', 'updatedAt'])
+                           ) ||
+                           (
+                             isCoupleMemberDoc(coupleId) &&
+                             get(couplePath(coupleId)).data.creatorUid == request.auth.uid &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidDateKey(dateKey) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 10. SHARED COUPLE BUCKET LIST ---
+      match /bucket_items/{itemId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(itemId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(itemId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'creatorUid', 'creatorName', 'memberUids', 'title', 'category', 'completed', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'creatorUid', 'creatorName', 'memberUids', 'title', 'category', 'completed', 'completedByUid', 'createdAt', 'updatedAt']) &&
+                         isValidBucketListItem(request.resource.data, coupleId) &&
+                         request.resource.data.creatorUid == request.auth.uid &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(itemId) &&
+                         isValidBucketListItem(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.creatorUid == resource.data.creatorUid &&
+                         request.resource.data.creatorName == resource.data.creatorName &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             (!('completedByUid' in request.resource.data) || request.resource.data.completedByUid == null || request.resource.data.completedByUid == request.auth.uid) &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'category', 'completed', 'completedByUid', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.creatorUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(itemId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 11. SECRET LOVE LETTERS & TIME CAPSULES ---
+      match /love_letters/{letterId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(letterId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(letterId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'senderUid', 'senderName', 'memberUids', 'title', 'body', 'sealStyle', 'unlockAtMillis', 'openedByPartner', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'senderUid', 'senderName', 'memberUids', 'title', 'body', 'sealStyle', 'unlockAtMillis', 'openedByPartner', 'openedAt', 'createdAt', 'updatedAt']) &&
+                         isValidLoveLetter(request.resource.data, coupleId) &&
+                         request.resource.data.senderUid == request.auth.uid &&
+                         request.resource.data.openedByPartner == false &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(letterId) &&
+                         isValidLoveLetter(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.senderUid == resource.data.senderUid &&
+                         request.resource.data.senderName == resource.data.senderName &&
+                         request.resource.data.title == resource.data.title &&
+                         request.resource.data.body == resource.data.body &&
+                         request.resource.data.sealStyle == resource.data.sealStyle &&
+                         request.resource.data.unlockAtMillis == resource.data.unlockAtMillis &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.auth.uid != resource.data.senderUid &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.resource.data.openedByPartner == true &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['openedByPartner', 'openedAt', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.senderUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(letterId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 12. SHARED WISH & LOVE JAR ---
+      match /love_jar/{noteId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(noteId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(noteId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'authorUid', 'authorName', 'memberUids', 'kind', 'text', 'granted', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'authorUid', 'authorName', 'memberUids', 'kind', 'text', 'granted', 'grantedByUid', 'createdAt', 'updatedAt']) &&
+                         isValidLoveJarNote(request.resource.data, coupleId) &&
+                         request.resource.data.authorUid == request.auth.uid &&
+                         request.resource.data.granted == false &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(noteId) &&
+                         isValidLoveJarNote(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.authorUid == resource.data.authorUid &&
+                         request.resource.data.authorName == resource.data.authorName &&
+                         request.resource.data.kind == resource.data.kind &&
+                         request.resource.data.text == resource.data.text &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             (!('grantedByUid' in request.resource.data) || request.resource.data.grantedByUid == null || request.resource.data.grantedByUid == request.auth.uid) &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['granted', 'grantedByUid', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.authorUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(noteId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 13. SHARED MUSIC & VIBE DEDICATIONS ---
+      match /vibe_dedications/{vibeId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(vibeId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(vibeId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'senderUid', 'senderName', 'memberUids', 'songTitle', 'artistName', 'vibeEmoji', 'dedicationNote', 'lovedByPartner', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'senderUid', 'senderName', 'memberUids', 'songTitle', 'artistName', 'vibeEmoji', 'dedicationNote', 'lovedByPartner', 'createdAt', 'updatedAt']) &&
+                         isValidVibeDedication(request.resource.data, coupleId) &&
+                         request.resource.data.senderUid == request.auth.uid &&
+                         request.resource.data.lovedByPartner == false &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(vibeId) &&
+                         isValidVibeDedication(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.senderUid == resource.data.senderUid &&
+                         request.resource.data.senderName == resource.data.senderName &&
+                         request.resource.data.songTitle == resource.data.songTitle &&
+                         request.resource.data.artistName == resource.data.artistName &&
+                         request.resource.data.vibeEmoji == resource.data.vibeEmoji &&
+                         request.resource.data.dedicationNote == resource.data.dedicationNote &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.auth.uid != resource.data.senderUid &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lovedByPartner', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.senderUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(vibeId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 14. CARE & WELLNESS CHECK-INS ---
+      match /care_checkins/{checkinId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(checkinId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(checkinId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'senderUid', 'senderName', 'memberUids', 'careType', 'message', 'acknowledged', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'senderUid', 'senderName', 'memberUids', 'careType', 'message', 'acknowledged', 'acknowledgedByUid', 'createdAt', 'updatedAt']) &&
+                         isValidCareCheckIn(request.resource.data, coupleId) &&
+                         request.resource.data.senderUid == request.auth.uid &&
+                         request.resource.data.acknowledged == false &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(checkinId) &&
+                         isValidCareCheckIn(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.senderUid == resource.data.senderUid &&
+                         request.resource.data.senderName == resource.data.senderName &&
+                         request.resource.data.careType == resource.data.careType &&
+                         request.resource.data.message == resource.data.message &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.auth.uid != resource.data.senderUid &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.resource.data.acknowledged == true &&
+                             request.resource.data.acknowledgedByUid == request.auth.uid &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acknowledged', 'acknowledgedByUid', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.senderUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(checkinId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 15. SHARED LOVE DOODLE CANVAS ---
+      match /love_doodles/{doodleId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(doodleId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(doodleId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'artistUid', 'artistName', 'memberUids', 'title', 'imageBase64', 'lovedByPartner', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'artistUid', 'artistName', 'memberUids', 'title', 'imageBase64', 'lovedByPartner', 'createdAt', 'updatedAt']) &&
+                         isValidLoveDoodle(request.resource.data, coupleId) &&
+                         request.resource.data.artistUid == request.auth.uid &&
+                         request.resource.data.lovedByPartner == false &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(doodleId) &&
+                         isValidLoveDoodle(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.artistUid == resource.data.artistUid &&
+                         request.resource.data.artistName == resource.data.artistName &&
+                         request.resource.data.title == resource.data.title &&
+                         request.resource.data.imageBase64 == resource.data.imageBase64 &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.auth.uid != resource.data.artistUid &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lovedByPartner', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.artistUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(doodleId) && request.auth.uid in resource.data.memberUids;
+      }
+
+      // --- 16. COUPLE PROMISE & PINKY-SWEAR VAULT ---
+      match /couple_promises/{promiseId} {
+        allow get: if isSignedIn() && isValidId(coupleId) && isValidId(promiseId) && request.auth.uid in resource.data.memberUids;
+        allow list: if isSignedIn() && request.auth.uid in resource.data.memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(promiseId) &&
+                         request.resource.data.keys().hasAll(['coupleId', 'creatorUid', 'creatorName', 'memberUids', 'title', 'category', 'signedByUids', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.keys().hasOnly(['coupleId', 'creatorUid', 'creatorName', 'memberUids', 'title', 'category', 'signedByUids', 'createdAt', 'updatedAt']) &&
+                         isValidCouplePromise(request.resource.data, coupleId) &&
+                         request.resource.data.creatorUid == request.auth.uid &&
+                         request.resource.data.signedByUids.size() == 1 &&
+                         request.resource.data.signedByUids[0] == request.auth.uid &&
+                         request.auth.uid in request.resource.data.memberUids &&
+                         isCoupleMemberDoc(coupleId) &&
+                         request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids;
+
+        allow update: if isSignedIn() &&
+                         isValidId(coupleId) &&
+                         isValidId(promiseId) &&
+                         isValidCouplePromise(request.resource.data, coupleId) &&
+                         request.resource.data.coupleId == resource.data.coupleId &&
+                         request.resource.data.creatorUid == resource.data.creatorUid &&
+                         request.resource.data.creatorName == resource.data.creatorName &&
+                         request.resource.data.title == resource.data.title &&
+                         request.resource.data.category == resource.data.category &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         (
+                           (
+                             request.auth.uid in resource.data.memberUids &&
+                             request.resource.data.memberUids == resource.data.memberUids &&
+                             request.auth.uid in request.resource.data.signedByUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['signedByUids', 'updatedAt'])
+                           ) ||
+                           (
+                             resource.data.creatorUid == request.auth.uid &&
+                             isCoupleMemberDoc(coupleId) &&
+                             request.resource.data.memberUids == get(couplePath(coupleId)).data.memberUids &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'updatedAt'])
+                           )
+                         );
+
+        allow delete: if isSignedIn() && isValidId(coupleId) && isValidId(promiseId) && request.auth.uid in resource.data.memberUids;
+      }
+    }
+  }
+}

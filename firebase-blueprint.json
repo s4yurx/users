@@ -1,0 +1,463 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private profile for an authenticated user including ECDH public key and linked couple reference.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID matching document ID." },
+        "displayName": { "type": "string", "description": "Display name shown to partner." },
+        "avatarInitials": { "type": "string", "description": "1-4 character monogram initials." },
+        "publicKey": { "type": "string", "description": "Base64 X.509 ECDH P-256 public key for end-to-end encryption." },
+        "coupleId": { "type": "string", "description": "Optional linked couple document ID." },
+        "birthdayMonth": { "type": "integer", "description": "Optional birth month (1-12)." },
+        "birthdayDay": { "type": "integer", "description": "Optional birth day (1-31)." },
+        "birthdayYear": { "type": "integer", "description": "Optional birth year (1900-2100)." },
+        "shareDeviceStatus": { "type": "boolean", "description": "Whether battery, network, and lock state are shared with partner." },
+        "partnerNickname": { "type": "string", "description": "Optional custom affectionate nickname given to partner (max 40 chars)." },
+        "status": { "type": "string", "enum": ["active", "banned", "suspended"], "description": "Admin-managed account status." },
+        "isBanned": { "type": "boolean", "description": "Admin-managed flag blocking account access immediately." },
+        "banReason": { "type": "string", "description": "Optional admin reason displayed on suspension screen." },
+        "bannedAt": { "type": "string", "format": "date-time", "description": "Server timestamp when account was banned." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "displayName", "avatarInitials", "publicKey", "createdAt", "updatedAt"]
+    },
+    "PairCode": {
+      "title": "PairCode",
+      "description": "Six-digit single-use invite code linking two partners into a private CoupleSpace.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "6-digit numeric invite code matching document ID." },
+        "coupleId": { "type": "string", "description": "Target couple document ID." },
+        "creatorUid": { "type": "string", "description": "UID of partner who created the invite code." },
+        "creatorName": { "type": "string", "description": "Display name of the inviting partner." },
+        "status": { "type": "string", "enum": ["open", "claimed"], "description": "Lifecycle status of the invite code." },
+        "claimedByUid": { "type": "string", "description": "UID of partner who claimed the code." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["code", "coupleId", "creatorUid", "creatorName", "status", "createdAt", "updatedAt"]
+    },
+    "CoupleSpace": {
+      "title": "CoupleSpace",
+      "description": "Shared private sanctuary for two partners with E2EE keys, special dates, and love pulse count.",
+      "type": "object",
+      "properties": {
+        "creatorUid": { "type": "string", "description": "UID of partner who created the couple space." },
+        "partnerUid": { "type": "string", "description": "UID of second partner once joined." },
+        "memberUids": { "type": "array", "description": "Bounded array of 1 to 2 partner UIDs." },
+        "inviteCode": { "type": "string", "description": "Active 6-digit invite code (rotated upon dissolution so old code is invalidated)." },
+        "status": { "type": "string", "enum": ["waiting", "paired", "dissolved"], "description": "Lifecycle state of the couple space." },
+        "dissolvedByUid": { "type": "string", "description": "UID of partner who removed the link and reset the couple space." },
+        "dissolvedByName": { "type": "string", "description": "Display name of partner who dissolved the couple space." },
+        "dissolvedAt": { "type": "string", "format": "date-time", "description": "Server timestamp when the couple space was dissolved." },
+        "creatorName": { "type": "string", "description": "Creator display name." },
+        "partnerName": { "type": "string", "description": "Partner display name." },
+        "creatorPublicKey": { "type": "string", "description": "Creator ECDH P-256 Base64 public key." },
+        "partnerPublicKey": { "type": "string", "description": "Partner ECDH P-256 Base64 public key." },
+        "wrappedVaultKey": { "type": "string", "description": "AES-256 vault key wrapped with invite-code derived key for pre-pairing handoff." },
+        "anniversaryYear": { "type": "integer", "description": "Anniversary start year." },
+        "anniversaryMonth": { "type": "integer", "description": "Anniversary month (1-12)." },
+        "anniversaryDay": { "type": "integer", "description": "Anniversary day (1-31)." },
+        "creatorBirthdayMonth": { "type": "integer", "description": "Creator birthday month (1-12)." },
+        "creatorBirthdayDay": { "type": "integer", "description": "Creator birthday day (1-31)." },
+        "partnerBirthdayMonth": { "type": "integer", "description": "Partner birthday month (1-12)." },
+        "partnerBirthdayDay": { "type": "integer", "description": "Partner birthday day (1-31)." },
+        "lovePulseCount": { "type": "integer", "description": "Total thinking-of-you love pulses exchanged." },
+        "lastPulseByUid": { "type": "string", "description": "UID of partner who sent the latest pulse." },
+        "lastPulseAt": { "type": "string", "format": "date-time", "description": "Server timestamp of latest love pulse." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["creatorUid", "memberUids", "inviteCode", "status", "creatorName", "creatorPublicKey", "wrappedVaultKey", "lovePulseCount", "createdAt", "updatedAt"]
+    },
+    "PartnerPresence": {
+      "title": "PartnerPresence",
+      "description": "Real-time partner mood and device telemetry (battery percentage, charging, network type, lock/in-use status).",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Partner UID matching document ID." },
+        "coupleId": { "type": "string", "description": "Parent couple space ID." },
+        "memberUids": { "type": "array", "description": "Denormalized member UIDs (size 1-2)." },
+        "displayName": { "type": "string", "description": "Partner display name." },
+        "batteryPercent": { "type": "integer", "description": "Battery percentage 0-100, or -1 if sharing disabled." },
+        "charging": { "type": "boolean", "description": "Whether the device is currently charging." },
+        "networkType": { "type": "string", "enum": ["WIFI", "CELLULAR", "ETHERNET", "OFFLINE", "HIDDEN"], "description": "Active network transport." },
+        "deviceStatus": { "type": "string", "enum": ["ACTIVE_IN_DUET", "IN_USE", "LOCKED", "HIDDEN"], "description": "Whether phone is in use or locked." },
+        "activeAppName": { "type": "string", "description": "Friendly display name of the currently open foreground app (e.g., Duet, Instagram, WhatsApp)." },
+        "deviceName": { "type": "string", "description": "Friendly logged-in device name (manufacturer and model)." },
+        "deviceSpecsJson": { "type": "string", "description": "JSON string containing complete A-to-Z device specifications (OS, security patch, build, kernel, baseband, hardware, RAM, storage, display, carrier, app version)." },
+        "moodKey": { "type": "string", "description": "Current mood key." },
+        "moodNote": { "type": "string", "description": "Short romantic mood status note." },
+        "statusShared": { "type": "boolean", "description": "Whether device telemetry sharing is enabled." },
+        "typingActive": { "type": "boolean", "description": "Whether the partner is currently typing in private chat." },
+        "typingUpdatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of latest typing status update." },
+        "lastSeenAt": { "type": "string", "format": "date-time", "description": "Server timestamp when user was last active in Duet (for WhatsApp-style Last Seen)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["userId", "coupleId", "memberUids", "displayName", "batteryPercent", "charging", "networkType", "deviceStatus", "moodKey", "moodNote", "statusShared", "createdAt", "updatedAt"]
+    },
+    "EncryptedMessage": {
+      "title": "EncryptedMessage",
+      "description": "End-to-end encrypted direct message or photo shared privately between two partners.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string", "description": "Parent couple space ID." },
+        "senderUid": { "type": "string", "description": "UID of message author." },
+        "senderName": { "type": "string", "description": "Author display name." },
+        "memberUids": { "type": "array", "description": "Denormalized member UIDs (size 1-2)." },
+        "messageType": { "type": "string", "enum": ["TEXT", "IMAGE", "LOVE_PULSE"], "description": "Message media kind." },
+        "keyMode": { "type": "string", "enum": ["ECDH_P256", "PAIR_VAULT"], "description": "E2EE key derivation mode." },
+        "ciphertext": { "type": "string", "description": "Base64 AES-256-GCM ciphertext of message payload." },
+        "iv": { "type": "string", "description": "Base64 12-byte GCM initialization vector." },
+        "reaction": { "type": "string", "description": "Legacy single reaction key." },
+        "reactions": { "type": "object", "description": "Per-partner emoji reaction map keyed by userId (max 2 entries)." },
+        "seenByUid": { "type": "string", "description": "Optional UID of partner who read the message." },
+        "seenAt": { "type": "string", "format": "date-time", "description": "Optional server timestamp when partner read the message." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["coupleId", "senderUid", "senderName", "memberUids", "messageType", "keyMode", "ciphertext", "iv", "createdAt", "updatedAt"]
+    },
+    "MoodEntry": {
+      "title": "MoodEntry",
+      "description": "Timestamped shared mood check-in logged by either partner.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string", "description": "Parent couple space ID." },
+        "userId": { "type": "string", "description": "UID of mood author." },
+        "authorName": { "type": "string", "description": "Display name of mood author." },
+        "memberUids": { "type": "array", "description": "Denormalized member UIDs (size 1-2)." },
+        "moodKey": { "type": "string", "description": "Mood identifier." },
+        "note": { "type": "string", "description": "Optional note accompanying mood." },
+        "energyLevel": { "type": "integer", "description": "Energy level 1-5." },
+        "comfortSentByUid": { "type": "string", "description": "UID of partner who sent a comfort hug." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["coupleId", "userId", "authorName", "memberUids", "moodKey", "note", "energyLevel", "createdAt", "updatedAt"]
+    },
+    "SharedMoment": {
+      "title": "SharedMoment",
+      "description": "End-to-end encrypted keepsake photo uploaded for your partner.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string", "description": "Parent couple space ID." },
+        "uploaderUid": { "type": "string", "description": "UID of photo uploader." },
+        "uploaderName": { "type": "string", "description": "Uploader display name." },
+        "memberUids": { "type": "array", "description": "Denormalized member UIDs (size 1-2)." },
+        "keyMode": { "type": "string", "enum": ["ECDH_P256", "PAIR_VAULT"], "description": "E2EE key derivation mode." },
+        "ciphertext": { "type": "string", "description": "Base64 AES-256-GCM ciphertext of photo & caption payload." },
+        "iv": { "type": "string", "description": "Base64 12-byte GCM initialization vector." },
+        "lovedByUids": { "type": "array", "description": "Bounded list (0-2) of partner UIDs who loved this moment." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["coupleId", "uploaderUid", "uploaderName", "memberUids", "keyMode", "ciphertext", "iv", "lovedByUids", "createdAt", "updatedAt"]
+    },
+    "SpecialDateEvent": {
+      "title": "SpecialDateEvent",
+      "description": "Shared anniversary, birthday, or romantic milestone countdown.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string", "description": "Parent couple space ID." },
+        "creatorUid": { "type": "string", "description": "UID of partner who added the event." },
+        "memberUids": { "type": "array", "description": "Denormalized member UIDs (size 1-2)." },
+        "title": { "type": "string", "description": "Event label." },
+        "category": { "type": "string", "enum": ["ANNIVERSARY", "BIRTHDAY", "DATE_NIGHT", "TRIP", "MILESTONE"], "description": "Event category." },
+        "year": { "type": "integer", "description": "Target or start year." },
+        "month": { "type": "integer", "description": "Month (1-12)." },
+        "day": { "type": "integer", "description": "Day of month (1-31)." },
+        "repeatsYearly": { "type": "boolean", "description": "Whether countdown rolls over annually." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["coupleId", "creatorUid", "memberUids", "title", "category", "year", "month", "day", "repeatsYearly", "createdAt", "updatedAt"]
+    },
+    "DailyPromptEntry": {
+      "title": "DailyPromptEntry",
+      "description": "Daily intimate question answered by both partners and unlocked together.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string", "description": "Parent couple space ID." },
+        "dateKey": { "type": "string", "description": "YYYY-MM-DD calendar key matching document ID." },
+        "promptIndex": { "type": "integer", "description": "Index into the curated couple prompt deck." },
+        "memberUids": { "type": "array", "description": "Denormalized member UIDs (size 1-2)." },
+        "creatorAnswer": { "type": "string", "description": "Answer submitted by couple creator." },
+        "partnerAnswer": { "type": "string", "description": "Answer submitted by joined partner." },
+        "creatorAnsweredUid": { "type": "string", "description": "UID of creator when answered." },
+        "partnerAnsweredUid": { "type": "string", "description": "UID of partner when answered." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["coupleId", "dateKey", "promptIndex", "memberUids", "createdAt", "updatedAt"]
+    },
+    "BucketListItem": {
+      "title": "BucketListItem",
+      "description": "Shared romantic bucket-list dream or couple goal checked off together.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string", "description": "Parent couple space ID." },
+        "creatorUid": { "type": "string", "description": "UID of partner who added the dream." },
+        "creatorName": { "type": "string", "description": "Display name of partner who added the dream." },
+        "memberUids": { "type": "array", "description": "Denormalized member UIDs (size 1-2)." },
+        "title": { "type": "string", "description": "Bucket-list dream or goal description (1-120 chars)." },
+        "category": { "type": "string", "enum": ["DATE_NIGHT", "TRAVEL", "COZY", "ADVENTURE", "FOODIE", "MILESTONE"], "description": "Bucket list theme category." },
+        "completed": { "type": "boolean", "description": "Whether the couple has completed this dream together." },
+        "completedByUid": { "type": "string", "description": "Optional UID of partner who marked it completed." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp written via FieldValue.serverTimestamp()." }
+      },
+      "required": ["coupleId", "creatorUid", "creatorName", "memberUids", "title", "category", "completed", "createdAt", "updatedAt"]
+    },
+    "LoveLetter": {
+      "title": "LoveLetter",
+      "description": "Heartfelt sealed love letter or future time-capsule letter shared between partners.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "sealStyle": { "type": "string", "enum": ["WAX_ROSE", "GOLD_ROYAL", "STARLIGHT", "VELVET_HEART", "PAPER_PLANE"] },
+        "unlockAtMillis": { "type": "integer" },
+        "openedByPartner": { "type": "boolean" },
+        "openedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coupleId", "senderUid", "senderName", "memberUids", "title", "body", "sealStyle", "unlockAtMillis", "openedByPartner", "createdAt", "updatedAt"]
+    },
+    "LoveJarNote": {
+      "title": "LoveJarNote",
+      "description": "Sweet appreciation note, compliment, memory, or secret wish placed inside the shared Love Jar.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "kind": { "type": "string", "enum": ["APPRECIATION", "WISH", "MEMORY", "COMPLIMENT"] },
+        "text": { "type": "string" },
+        "granted": { "type": "boolean" },
+        "grantedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coupleId", "authorUid", "authorName", "memberUids", "kind", "text", "granted", "createdAt", "updatedAt"]
+    },
+    "VibeDedication": {
+      "title": "VibeDedication",
+      "description": "Song and musical vibe dedication sent to your partner with a personal note.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "songTitle": { "type": "string" },
+        "artistName": { "type": "string" },
+        "vibeEmoji": { "type": "string" },
+        "dedicationNote": { "type": "string" },
+        "lovedByPartner": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coupleId", "senderUid", "senderName", "memberUids", "songTitle", "artistName", "vibeEmoji", "dedicationNote", "lovedByPartner", "createdAt", "updatedAt"]
+    },
+    "CareCheckIn": {
+      "title": "CareCheckIn",
+      "description": "Gentle wellness and care check-in nudge sent between partners with quick acknowledgement.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "senderName": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "careType": { "type": "string", "enum": ["WATER", "FOOD", "MEDS", "REST", "SAFE_HOME", "PERIOD_CARE", "CUSTOM"] },
+        "message": { "type": "string" },
+        "acknowledged": { "type": "boolean" },
+        "acknowledgedByUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coupleId", "senderUid", "senderName", "memberUids", "careType", "message", "acknowledged", "createdAt", "updatedAt"]
+    },
+    "LoveDoodle": {
+      "title": "LoveDoodle",
+      "description": "Hand-drawn HD love sketch sent from the in-app drawing canvas to the shared couple gallery.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string" },
+        "artistUid": { "type": "string" },
+        "artistName": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "title": { "type": "string" },
+        "imageBase64": { "type": "string" },
+        "lovedByPartner": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coupleId", "artistUid", "artistName", "memberUids", "title", "imageBase64", "lovedByPartner", "createdAt", "updatedAt"]
+    },
+    "CouplePromise": {
+      "title": "CouplePromise",
+      "description": "Shared pinky-swear couple promise co-signed by both partners.",
+      "type": "object",
+      "properties": {
+        "coupleId": { "type": "string" },
+        "creatorUid": { "type": "string" },
+        "creatorName": { "type": "string" },
+        "memberUids": { "type": "array" },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["TRUST", "ROMANCE", "QUALITY_TIME", "GROWTH", "FUN"] },
+        "signedByUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coupleId", "creatorUid", "creatorName", "memberUids", "title", "category", "signedByUids", "createdAt", "updatedAt"]
+    },
+    "LiveAppConfig": {
+      "title": "LiveAppConfig",
+      "description": "Bondly Admin (com.aistudio.bondlyadmin.vzrqnp) real-time Over-The-Air configuration controlling maintenance mode, announcements, promo banners, feature flags, version control, and dynamic key-value config.",
+      "type": "object",
+      "properties": {
+        "maintenanceMode": { "type": "boolean", "description": "When true, hides main app screens behind Maintenance screen." },
+        "maintenanceTitle": { "type": "string", "description": "Optional custom headline on the Maintenance screen." },
+        "maintenanceMessage": { "type": "string", "description": "Admin message displayed while app is under maintenance." },
+        "maintenanceEta": { "type": "string", "description": "Optional estimated completion time displayed on Maintenance screen." },
+        "upcomingMaintenance": { "type": "boolean", "description": "When true, displays a top warning banner for scheduled maintenance." },
+        "upcomingMaintenanceText": { "type": "string", "description": "Advance notice message for upcoming maintenance." },
+        "showBanner": { "type": "boolean", "description": "When true, displays top announcement banner." },
+        "bannerTitle": { "type": "string", "description": "Optional short title on the announcement banner." },
+        "bannerText": { "type": "string", "description": "Announcement headline or message." },
+        "bannerLink": { "type": "string", "description": "Optional HTTPS URL opened when user taps the announcement banner." },
+        "bannerType": { "type": "string", "enum": ["info", "update", "warning", "maintenance"], "description": "Visual severity style of the announcement banner." },
+        "showPromoBanner": { "type": "boolean", "description": "When true, displays top promotional campaign banner." },
+        "promoTitle": { "type": "string", "description": "Short headline for the promo banner." },
+        "promoText": { "type": "string", "description": "Promotional body copy or offer summary." },
+        "promoBadge": { "type": "string", "description": "Optional badge or promo code shown in pill." },
+        "promoCtaText": { "type": "string", "description": "Optional call-to-action button label on promo banner." },
+        "promoLink": { "type": "string", "description": "Optional HTTPS URL opened by promo banner CTA." },
+        "promoColor": { "type": "string", "description": "Optional accent style key for promo banner." },
+        "sharedJournalEnabled": { "type": "boolean", "description": "Feature flag controlling Shared Moments, Love Letters & Love Jar." },
+        "datePlannerEnabled": { "type": "boolean", "description": "Feature flag controlling Date Planner countdowns & Date Wheel." },
+        "moodSyncEnabled": { "type": "boolean", "description": "Feature flag controlling live Mood Sync card & history." },
+        "dailyPromptEnabled": { "type": "boolean", "description": "Feature flag controlling Daily Prompt Check (Today's Question for Two)." },
+        "forceUpdate": { "type": "boolean", "description": "When true and app version is below minVersion, blocks app until updated." },
+        "showUpdateBanner": { "type": "boolean", "description": "When true, shows top banner notifying user of an available app update." },
+        "showUpdatePopup": { "type": "boolean", "description": "When true, shows optional update available popup dialog." },
+        "minVersion": { "type": "string", "description": "Minimum required app version string or numeric code." },
+        "latestVersion": { "type": "string", "description": "Latest released version advertised by Bondly Admin." },
+        "minVersionCode": { "type": "integer", "description": "Optional minimum required Android versionCode integer." },
+        "latestVersionCode": { "type": "integer", "description": "Optional latest released Android versionCode integer." },
+        "blockedVersions": { "type": "array", "description": "List of blocked version names or version codes requiring immediate update." },
+        "updateTitle": { "type": "string", "description": "Optional custom title on update banner/popup." },
+        "updateMessage": { "type": "string", "description": "Release notes or changelog shown in the update popup and notification." },
+        "updateLink": { "type": "string", "description": "Optional HTTPS URL where user can download the update." },
+        "dynamicConfig": { "type": "object", "description": "Dynamic key-value parameters pushed in real time from Bondly Admin." },
+        "adminPackageId": { "type": "string", "description": "Source Bondly Admin Android applicationId (com.aistudio.bondlyadmin.vzrqnp)." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of latest admin update." }
+      }
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "type": "object" },
+      "description": "Server/Console-managed registry of authorized Bondly Admin operator UIDs."
+    },
+    "/app_config/{configId}": {
+      "schema": { "$ref": "#/entities/LiveAppConfig" },
+      "description": "Live OTA app configuration documents managed by Bondly Admin and read in real time by Bondly Couple Space."
+    },
+    "/feature_flags/{flagId}": {
+      "schema": { "type": "object" },
+      "description": "Live OTA feature flag toggles (sharedJournal, datePlanner, moodSync, dailyPromptCheck) managed by Bondly Admin."
+    },
+    "/banners/{bannerId}": {
+      "schema": { "type": "object" },
+      "description": "Live OTA announcement banners managed by Bondly Admin."
+    },
+    "/promo_banners/{promoId}": {
+      "schema": { "type": "object" },
+      "description": "Live OTA promotional banners managed by Bondly Admin."
+    },
+    "/version_control/{versionId}": {
+      "schema": { "type": "object" },
+      "description": "Live OTA version control rules (minVersion, latestVersion, forceUpdate, blockedVersions) managed by Bondly Admin."
+    },
+    "/dynamic_config/{entryId}": {
+      "schema": { "type": "object" },
+      "description": "Live OTA dynamic key-value parameters managed by Bondly Admin."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Owner-only user profiles storing display name, ECDH public key, birthday, coupleId, and admin ban status."
+    },
+    "/pair_codes/{code}": {
+      "schema": { "$ref": "#/entities/PairCode" },
+      "description": "Six-digit invite code documents allowing exact lookup by code without list access."
+    },
+    "/couples/{coupleId}": {
+      "schema": { "$ref": "#/entities/CoupleSpace" },
+      "description": "Couple space documents holding partner metadata, E2EE public keys, countdown dates, and pulse counter."
+    },
+    "/couples/{coupleId}/presence/{memberUid}": {
+      "schema": { "$ref": "#/entities/PartnerPresence" },
+      "description": "Live partner device telemetry (battery, network, lock/in-use status) and active mood."
+    },
+    "/couples/{coupleId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/EncryptedMessage" },
+      "description": "End-to-end encrypted direct messages and HD DM photos between the paired partners."
+    },
+    "/couples/{coupleId}/moods/{moodId}": {
+      "schema": { "$ref": "#/entities/MoodEntry" },
+      "description": "Shared mood tracker timeline entries logged by both partners."
+    },
+    "/couples/{coupleId}/moments/{momentId}": {
+      "schema": { "$ref": "#/entities/SharedMoment" },
+      "description": "End-to-end encrypted HD photo keepsakes uploaded for partner."
+    },
+    "/couples/{coupleId}/events/{eventId}": {
+      "schema": { "$ref": "#/entities/SpecialDateEvent" },
+      "description": "Custom special dates and milestone countdowns shared by the couple."
+    },
+    "/couples/{coupleId}/daily_prompts/{dateKey}": {
+      "schema": { "$ref": "#/entities/DailyPromptEntry" },
+      "description": "Daily couple questions answered by both partners and unlocked together."
+    },
+    "/couples/{coupleId}/bucket_items/{itemId}": {
+      "schema": { "$ref": "#/entities/BucketListItem" },
+      "description": "Shared romantic bucket-list dreams and couple wishlist items synced between both partners."
+    },
+    "/couples/{coupleId}/love_letters/{letterId}": {
+      "schema": { "$ref": "#/entities/LoveLetter" },
+      "description": "Sealed love letters and future time-capsule notes exchanged between partners."
+    },
+    "/couples/{coupleId}/love_jar/{noteId}": {
+      "schema": { "$ref": "#/entities/LoveJarNote" },
+      "description": "Shared Love Jar appreciation notes, compliments, memories, and wishes."
+    },
+    "/couples/{coupleId}/vibe_dedications/{vibeId}": {
+      "schema": { "$ref": "#/entities/VibeDedication" },
+      "description": "Shared song and vibe dedications between partners."
+    },
+    "/couples/{coupleId}/care_checkins/{checkinId}": {
+      "schema": { "$ref": "#/entities/CareCheckIn" },
+      "description": "Partner care and wellness check-in nudges with quick completion acknowledgements."
+    },
+    "/couples/{coupleId}/love_doodles/{doodleId}": {
+      "schema": { "$ref": "#/entities/LoveDoodle" },
+      "description": "Hand-drawn HD love doodles shared in the couple sketch gallery."
+    },
+    "/couples/{coupleId}/couple_promises/{promiseId}": {
+      "schema": { "$ref": "#/entities/CouplePromise" },
+      "description": "Co-signed pinky-swear couple promises and commitments."
+    }
+  }
+}

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Frosted outer ring -->
+    <path
+        android:strokeColor="#E8EEF8"
+        android:strokeAlpha="0.85"
+        android:strokeWidth="4"
+        android:fillColor="#FFFFFF"
+        android:fillAlpha="0.12"
+        android:pathData="M54,30 A24,24 0 1,0 54,78 A24,24 0 1,0 54,30 Z" />
+    <!-- Crisp minimalist heart -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,66 C54,66 40,57.2 40,48.5 C40,44.2 43.4,41 47.6,41 C50.2,41 52.5,42.3 54,44.4 C55.5,42.3 57.8,41 60.4,41 C64.6,41 68,44.2 68,48.5 C68,57.2 54,66 54,66 Z" />
+</vector>

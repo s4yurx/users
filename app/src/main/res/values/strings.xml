@@ -1,0 +1,124 @@
+<resources>
+    <string name="app_name">Duet</string>
+    <string name="widget_name">Duet Love Status Widget</string>
+    <string name="widget_description">Shows your partner mood, live battery status, open app, and anniversary countdown on your home screen.</string>
+    <string name="widget_quick_chat_name">Duet Private Quick-Chat</string>
+    <string name="widget_quick_chat_description">Read recent encrypted messages and send quick private replies right from your home screen.</string>
+    <string name="widget_theme_name">Duet Theme &amp; Pulse Switcher</string>
+    <string name="widget_theme_description">Switch Duet application themes and send a Love Pulse right from your home screen.</string>
+    <string name="widget_countdown_name">Duet Days Together &amp; Countdowns</string>
+    <string name="widget_countdown_description">Shows days together plus live Anniversary and Partner Birthday countdowns.</string>
+    <string name="widget_mood_name">Duet Quick Mood Check-In</string>
+    <string name="widget_mood_description">Share In Love, Missing You, Cozy, or Need Hugs with 1 tap from your home screen.</string>
+    <string name="widget_question_name">Duet Today\'s Question</string>
+    <string name="widget_question_description">Displays Today\'s Question for Two with unlock status and IST expiry countdown.</string>
+    <string name="widget_radar_name">Duet Partner Live Radar</string>
+    <string name="widget_radar_description">Live partner battery, network, active app, and 1-tap Care Nudge &amp; Love Pulse.</string>
+    <string name="widget_hub_name">Duet Couple Care &amp; Love Hub</string>
+    <string name="widget_hub_description">Latest Love Jar note, Song Dedication, Bucket List progress &amp; 1-tap Hydrate/Pulse.</string>
+
+    <!-- Auth -->
+    <string name="auth_tagline">A quiet, encrypted sanctuary built for two.</string>
+    <string name="auth_sign_in_google">Continue with Google</string>
+    <string name="auth_feature_e2ee">End-to-end encrypted chat &amp; private photos</string>
+    <string name="auth_feature_code">Link instantly with a 6-digit invite code</string>
+    <string name="auth_feature_live">Shared moods, countdowns &amp; live status</string>
+
+    <!-- Pairing -->
+    <string name="pairing_title">Connect Your Duet</string>
+    <string name="pairing_subtitle">Start a private space for two and share your 6-digit code, or enter the code your partner sent you.</string>
+    <string name="pairing_create_tab">Create Code</string>
+    <string name="pairing_join_tab">Enter Code</string>
+    <string name="pairing_nickname_label">Your sweet nickname</string>
+    <string name="pairing_create_button">Generate 6-Digit Invite Code</string>
+    <string name="pairing_join_button">Link With Partner</string>
+    <string name="pairing_code_label">Enter 6-digit partner code</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Home</string>
+    <string name="nav_chat">Private</string>
+    <string name="nav_moments">Moments</string>
+    <string name="nav_dates">Dates</string>
+
+    <!-- Home & Status -->
+    <string name="home_waiting_banner_title">Waiting for your partner</string>
+    <string name="home_copy_code">Copy Code</string>
+    <string name="home_share_code">Share</string>
+    <string name="partner_tap_hint">Tap for battery &amp; status</string>
+    <string name="status_in_use">Mobile In Use</string>
+    <string name="status_active_duet">Active in Duet</string>
+    <string name="status_locked">Mobile Locked</string>
+    <string name="status_hidden">Status Hidden</string>
+    <string name="status_battery">Battery</string>
+    <string name="status_network">Network</string>
+    <string name="status_device">Phone Status</string>
+    <string name="status_charging">Charging</string>
+    <string name="status_on_battery">On Battery</string>
+
+    <!-- Moods & Pulse -->
+    <string name="mood_section_title">Shared Moods</string>
+    <string name="mood_update_button">Share Mood</string>
+    <string name="pulse_title">Thinking of You</string>
+    <string name="pulse_button">Send Love Pulse</string>
+
+    <!-- Chat -->
+    <string name="chat_e2ee_badge">End-to-End Encrypted</string>
+    <string name="chat_input_hint">Whisper something private…</string>
+    <string name="chat_empty_title">Your encrypted space awaits</string>
+    <string name="chat_empty_subtitle">Messages and photos sent here are encrypted with AES-256-GCM before leaving your device.</string>
+
+    <!-- Moments -->
+    <string name="moments_title">Shared Moments</string>
+    <string name="moments_add_button">Upload Photo</string>
+    <string name="moments_empty_title">Capture your first keepsake</string>
+    <string name="moments_empty_subtitle">Upload encrypted photos for your partner with sweet captions and memories.</string>
+
+    <!-- Dates -->
+    <string name="dates_title">Our Countdowns</string>
+    <string name="dates_anniversary">Anniversary</string>
+    <string name="dates_partner_birthday">Partner\'s Birthday</string>
+    <string name="dates_my_birthday">Your Birthday</string>
+    <string name="dates_add_event">Add Special Date</string>
+
+    <!-- Widget -->
+    <string name="widget_studio_title">Cute Home Widget</string>
+    <string name="widget_pin_button">Add to Home Screen</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Duet Settings</string>
+    <string name="settings_sign_out">Sign Out</string>
+
+    <!-- Account Governance & Live OTA Configuration -->
+    <string name="banned_title">Account Suspended</string>
+    <string name="banned_subtitle">You have been banned by the admin.</string>
+    <string name="banned_reason_label">Reason from admin</string>
+    <string name="banned_default_reason">Your access has been restricted by an administrator due to a policy or safety violation.</string>
+    <string name="banned_live_hint">Listening live — your space restores automatically once reactivated by admin</string>
+    <string name="banned_refresh_status">Check Account Status</string>
+    <string name="banned_checking_status">Checking Status…</string>
+    <string name="banned_try_other_account">Sign In With Another Account</string>
+    <string name="partner_banned_badge">BANNED</string>
+    <string name="partner_banned_title_suffix">\'s Account Banned</string>
+    <string name="partner_banned_admin_mark">Account Banned by Admin</string>
+    <string name="partner_banned_wipe_note">You can still remove shared data for your side; your partner\'s account remains suspended.</string>
+    <string name="partner_banned_wipe_button">Remove Partner &amp; Wipe All Data</string>
+    <string name="maintenance_title">Under Maintenance</string>
+    <string name="maintenance_default_message">Duet is currently undergoing scheduled maintenance to serve you better. Please check back shortly.</string>
+    <string name="maintenance_live_hint">Updates automatically when maintenance ends</string>
+    <string name="banner_open_link">Open</string>
+    <string name="force_update_title">Update Available</string>
+    <string name="force_update_default_message">A new version of Duet is available! This older version is no longer usable. Tap Download Now to get the latest update.</string>
+    <string name="force_update_action">Download Now</string>
+    <string name="optional_update_title">Update Available</string>
+    <string name="optional_update_default_message">A fresh update for Duet is ready with improvements and new features from Bondly.</string>
+    <string name="optional_update_action">Download Now</string>
+    <string name="optional_update_later">Later</string>
+    <string name="update_whats_new_label">What\'s New</string>
+    <string name="upcoming_maintenance_label">Scheduled Maintenance</string>
+    <string name="maintenance_bondly_control">Managed live via Bondly Control</string>
+    <string name="settings_updates_title">App Updates &amp; Bondly Control</string>
+    <string name="settings_open_admin_app">Open Bondly Admin</string>
+    <string name="promo_default_cta">Explore</string>
+    <string name="promo_default_title">Bondly Special Offer</string>
+    <string name="feature_paused_by_admin">Turned off remotely via Bondly Admin</string>
+</resources>
